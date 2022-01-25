@@ -197,7 +197,7 @@ class Mem_Range:
                 lst.append(getattr(self.mem_list[idx], attribute))
             return lst
         
-    def push_stack(self, low_value, high_value):
+    def push_stack(self, high_value, low_value):
         for idx in range(self.stack_pointer, -1, 2):
             self.mem_list[idx - 1].value = self.mem_list[idx + 1].value
             self.mem_list[idx].value = self.mem_list[idx + 2].value
@@ -219,7 +219,7 @@ class Mem_Range:
                 self.mem_list[-1].value = 0
                 self.mem_list[-2].value = 0
             self.stack_pointer += 2    
-            return (low_value, high_value)
+            return (high_value, low_value)
 
 #Классы команд
 class Command:
@@ -246,7 +246,7 @@ class cmMOV(Command):
 
 class cmMVI(Command):
     
-    def __init__(self, fullname, code, reg_obj, mem_obj, reg, description = ''):
+    def __init__(self, fullname, code, reg_obj, mem_obj, reg = '', description = ''):
         self.fullname = fullname
         self.code = code
         self.reg_obj = reg_obj
@@ -260,45 +260,230 @@ class cmMVI(Command):
         else:
             self.reg_obj.get_register(self.reg).value = value
         
-class cmLDAX(cmMVI): 
-        
+class cmLDAX(cmMVI):         
     def do(self):
         self.reg_obj.get_register('A').value = self.mem_obj.get_mem(self.reg_obj.get_register(self.reg).value).value
         
-class cmSTAX(cmMVI):
-        
+class cmSTAX(cmMVI):        
     def do(self):
         self.mem_obj.get_mem(self.reg_obj.get_register(self.reg).value).value = self.reg_obj.get_register('A').value
         
-class cmLDA(cmMVI): 
-        
+class cmLDA(cmMVI):         
     def do(self, high_value, low_value):
         self.reg_obj.get_register('A').value = self.mem_obj.get_mem(256 * high_value + low_value).value
         
-class cmSTA(cmMVI):
-        
+class cmSTA(cmMVI):        
     def do(self, high_value, low_value):
         self.mem_obj.get_mem(256 * high_value + low_value).value = self.reg_obj.get_register('A').value
 
-class cmLXI(cmMVI):
-        
+class cmLXI(cmMVI):        
     def do(self, high_value, low_value):
         self.reg_obj.get_register(self.reg).value = 256 * high_value + low_value
         
-class cmLHLD(cmMVI):
-        
+class cmLHLD(cmMVI):        
     def do(self, high_value, low_value):
         self.reg_obj.get_register('H').value = self.mem_obj.get_mem(256 * high_value + low_value).value
         self.reg_obj.get_register('L').value = self.mem_obj.get_mem(256 * high_value + low_value + 1).value
+
+class cmSHLD(cmMVI):       
+    def do(self, high_value, low_value):
+        self.mem_obj.get_mem(256 * high_value + low_value).value = self.reg_obj.get_register('H').value
+        self.mem_obj.get_mem(256 * high_value + low_value + 1).value = self.reg_obj.get_register('L').value
+
+class cmSPHL(cmMVI):        
+    def do(self):
+        self.reg_obj.get_register('SP').value = self.reg_obj.get_register('HL').value
+
+class cmPCHL(cmMVI):        
+    def do(self):
+        self.reg_obj.get_register('PC').value = self.reg_obj.get_register('HL').value
         
-#testing
-m1 = Mem_Range(33280, 33300)
-r1 = Registers()
-r1.get_register('L').value = 100
+class cmXCHG(cmMVI):        
+    def do(self):
+        temp = self.reg_obj.get_register('DE').value
+        self.reg_obj.get_register('DE').value = self.reg_obj.get_register('HL').value
+        self.reg_obj.get_register('HL').value = temp
+        
+class cmXTHL(cmMVI):        
+    def do(self):
+        temp = self.mem_obj.pop_stack()
+        self.mem_obj.pop_stack(self.reg_obj.get_register('H').value, self.reg_obj.get_register('L').value)
+        self.reg_obj.get_register('H').value = temp[0]
+        self.reg_obj.get_register('L').value = temp[1]
+        
+class cmADD(cmMVI):        
+    def do(self, value = None):
+        if self.reg == 'M':
+            self.reg_obj.get_register('A').value = self.reg_obj.get_register('A').value + self.mem_obj.get_mem(self.reg_obj.get_register('HL').value).value
+        elif value != None:
+            self.reg_obj.get_register('A').value = self.reg_obj.get_register('A').value + value
+        else:
+            self.reg_obj.get_register('A').value = self.reg_obj.get_register('A').value + self.reg_obj.get_register(self.reg).value
 
-movaa = cmMOV('MOV A, A', '7F', r1, m1, 'A', 'A')
-mvia = cmMVI('MVI A N', '3E', r1, m1, 'A')
+class cmADC(cmMVI):        
+    def do(self, value = None):
+        if self.reg == 'M':
+            self.reg_obj.get_register('A').value = self.reg_obj.get_register('A').value + self.mem_obj.get_mem(self.reg_obj.get_register('HL').value).value + self.reg_obj.get_register('F').c.value
+        elif value != None:
+            self.reg_obj.get_register('A').value = self.reg_obj.get_register('A').value + value + self.reg_obj.get_register('F').c.value
+        else:
+            self.reg_obj.get_register('A').value = self.reg_obj.get_register('A').value + self.reg_obj.get_register(self.reg).value + self.reg_obj.get_register('F').c.value
 
-mvia.do(100)
-print(r1.get_register('A').value)        
+class cmSUB(cmMVI):        
+    def do(self, value = None):
+        if self.reg == 'M':
+            self.reg_obj.get_register('A').value = self.reg_obj.get_register('A').value - self.mem_obj.get_mem(self.reg_obj.get_register('HL').value).value
+        elif value != None:
+            self.reg_obj.get_register('A').value = self.reg_obj.get_register('A').value - value
+        else:
+            self.reg_obj.get_register('A').value = self.reg_obj.get_register('A').value - self.reg_obj.get_register(self.reg).value
 
+class cmSBB(cmMVI):        
+    def do(self, value = None):
+        if self.reg == 'M':
+            self.reg_obj.get_register('A').value = self.reg_obj.get_register('A').value - self.mem_obj.get_mem(self.reg_obj.get_register('HL').value).value - self.reg_obj.get_register('F').c.value
+        elif value != None:
+            self.reg_obj.get_register('A').value = self.reg_obj.get_register('A').value - value - self.reg_obj.get_register('F').c.value
+        else:
+            self.reg_obj.get_register('A').value = self.reg_obj.get_register('A').value - self.reg_obj.get_register(self.reg).value - self.reg_obj.get_register('F').c.value            
+
+class cmDAD(cmMVI):        
+    def do(self):
+        self.reg_obj.get_register('HL').value = self.reg_obj.get_register('HL').value + self.reg_obj.get_register(self.reg).value
+
+class cmINR(cmMVI):        
+    def do(self):
+        self.reg_obj.get_register(self.reg).value = self.reg_obj.get_register(self.reg).value + 1
+        
+class cmDCR(cmMVI):        
+    def do(self):
+        self.reg_obj.get_register(self.reg).value = self.reg_obj.get_register(self.reg).value - 1
+        
+class cmANA(cmMVI):        
+    def do(self, value = None):
+        if value != None:
+            self.reg_obj.get_register('A').value = self.reg_obj.get_register('A').value & value
+        else:
+            self.reg_obj.get_register('A').value = self.reg_obj.get_register('A').value & self.reg_obj.get_register(self.reg).value
+
+class cmORA(cmMVI):        
+    def do(self, value = None):
+        if value != None:
+            self.reg_obj.get_register('A').value = self.reg_obj.get_register('A').value | value
+        else:
+            self.reg_obj.get_register('A').value = self.reg_obj.get_register('A').value | self.reg_obj.get_register(self.reg).value
+            
+class cmXRA(cmMVI):        
+    def do(self, value = None):
+        if value != None:
+            self.reg_obj.get_register('A').value = self.reg_obj.get_register('A').value ^ value
+        else:
+            self.reg_obj.get_register('A').value = self.reg_obj.get_register('A').value ^ self.reg_obj.get_register(self.reg).value
+
+class cmCMP(cmMVI):        
+    def do(self, value = None):
+        if value != None:
+            temp = self.reg_obj.get_register('A').value - value
+        else:
+            temp = self.reg_obj.get_register('A').value - self.reg_obj.get_register(self.reg).value
+        if temp == 0:
+            self.reg_obj.get_register('F').z.value = 1
+        elif temp < 0:
+            self.reg_obj.get_register('F').c.value = 1
+            
+class cmRLC(cmMVI):        
+    def do(self):
+        st = re.split('', bin(self.reg_obj.get_register('A').value[2:])[1:-1]
+        self.reg_obj.get_register('F').c.value = int(st[0])
+        st.append(st.pop(0))
+        st.insert(0, '0b')
+        self.reg_obj.get_register('A').value = int("".join(st), 2)                       
+
+class cmRRC(cmMVI):        
+    def do(self):
+        st = re.split('', bin(self.reg_obj.get_register('A').value[2:])[1:-1]
+        self.reg_obj.get_register('F').c.value = int(st[-1])
+        st.insert(0, st[-1])
+        st.insert(0, '0b')
+        st.pop()
+        self.reg_obj.get_register('A').value = int("".join(st), 2)                      
+
+class cmRAL(cmMVI):        
+    def do(self):
+        st = re.split('', bin(self.reg_obj.get_register('A').value[2:])[1:-1]
+        st.append(str(self.reg_obj.get_register('F').c.value))
+        self.reg_obj.get_register('F').c.value = int(st[0]))
+        st.pop(0)
+        st.insert(0, '0b')
+        self.reg_obj.get_register('A').value = int("".join(st), 2)
+                      
+class cmRAR(cmMVI):        
+    def do(self):
+        st = re.split('', bin(self.reg_obj.get_register('A').value[2:])[1:-1]
+        st.insert(0, str(self.reg_obj.get_register('F').c.value))
+        self.reg_obj.get_register('F').c.value = int(st[-1])
+        st.pop()
+        st.insert(0, '0b')
+        self.reg_obj.get_register('A').value = int("".join(st), 2)
+                      
+class cmJMP(cmMVI):       
+    def do(self, high_value, low_value):
+        if self.reg == '':
+            self.reg_obj.get_register('PC').value = 256 * high_value + low_value
+        elif self.reg == 'c':
+            if self.reg_obj.get_register('F').c.value == 1:
+                self.reg_obj.get_register('PC').value = 256 * high_value + low_value
+            else:
+                self.reg_obj.get_register('PC').value = self.reg_obj.get_register('PC').value + 1
+        elif self.reg == 'nc':
+            if self.reg_obj.get_register('F').c.value == 0:
+                self.reg_obj.get_register('PC').value = 256 * high_value + low_value
+            else:
+                self.reg_obj.get_register('PC').value = self.reg_obj.get_register('PC').value + 1
+        elif self.reg == 'z':
+            if self.reg_obj.get_register('F').z.value == 1:
+                self.reg_obj.get_register('PC').value = 256 * high_value + low_value
+            else:
+                self.reg_obj.get_register('PC').value = self.reg_obj.get_register('PC').value + 1
+        elif self.reg == 'nz':
+            if self.reg_obj.get_register('F').z.value == 0:
+                self.reg_obj.get_register('PC').value = 256 * high_value + low_value
+            else:
+                self.reg_obj.get_register('PC').value = self.reg_obj.get_register('PC').value + 1 
+        elif self.reg == 'm':
+            if self.reg_obj.get_register('F').s.value == 1:
+                self.reg_obj.get_register('PC').value = 256 * high_value + low_value
+            else:
+                self.reg_obj.get_register('PC').value = self.reg_obj.get_register('PC').value + 1
+        elif self.reg == 'p':
+            if self.reg_obj.get_register('F').s.value == 0:
+                self.reg_obj.get_register('PC').value = 256 * high_value + low_value
+            else:
+                self.reg_obj.get_register('PC').value = self.reg_obj.get_register('PC').value + 1              
+        elif self.reg == 'pe':
+            if self.reg_obj.get_register('F').p.value == 1:
+                self.reg_obj.get_register('PC').value = 256 * high_value + low_value
+            else:
+                self.reg_obj.get_register('PC').value = self.reg_obj.get_register('PC').value + 1
+        elif self.reg == 'po':
+            if self.reg_obj.get_register('F').p.value == 0:
+                self.reg_obj.get_register('PC').value = 256 * high_value + low_value
+            else:
+                self.reg_obj.get_register('PC').value = self.reg_obj.get_register('PC').value + 1                            
+                      
+class cmPOP(cmMVI):       
+    def do(self):
+        temp = self.mem_obj.pop_stack()
+        self.reg_obj.get_register(self.reg).value = 256 * temp[0] + temp[1]             
+
+class cmPUSH(cmMVI):       
+    def do(self):
+        self.mem_obj.push_stack(self.reg_obj.get_register(self.reg).high_value, self.reg_obj.get_register(self.reg).low_value)
+
+class cmCMC(cmMVI):
+    def do(self):
+        self.reg_obj.get_register('F').c.value = 1 - self.reg_obj.get_register('F').c.value
+                      
+class cmSTC(cmMVI):
+    def do(self):
+        self.reg_obj.get_register('F').c.value = 1                           
